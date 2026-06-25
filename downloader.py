@@ -79,6 +79,8 @@ def download_audio_from_url(url: str, progress_callback=None) -> Tuple[str, dict
         "--no-playlist",
         "-f", "ba/b",
         "--no-cache-dir",
+        "--no-check-certificate",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "-4",
         "--output", str(output_path) + ".%(ext)s",
         "--no-warnings",
