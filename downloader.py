@@ -98,6 +98,7 @@ def download_audio_from_url(url: str, progress_callback=None, cookies_path: Opti
     
     success = False
     result = None
+    cookie_error = None
     
     # Try 1: Custom cookies file (if uploaded by user)
     if cookies_path and os.path.exists(cookies_path):
@@ -115,9 +116,11 @@ def download_audio_from_url(url: str, progress_callback=None, cookies_path: Opti
             if result.returncode == 0:
                 success = True
             else:
+                cookie_error = result.stderr
                 if progress_callback:
                     progress_callback(13, f"Uploaded cookies failed, trying Chrome browser cookies...")
         except Exception as e:
+            cookie_error = str(e)
             if progress_callback:
                 progress_callback(13, f"Uploaded cookies error: {str(e)[:40]}")
 
@@ -154,7 +157,10 @@ def download_audio_from_url(url: str, progress_callback=None, cookies_path: Opti
             if result.returncode == 0:
                 success = True
             else:
-                raise RuntimeError(result.stderr)
+                err_msg = result.stderr
+                if cookie_error:
+                    err_msg += f"\n\n[Chi tiết lỗi Cookie upload]:\n{cookie_error}"
+                raise RuntimeError(err_msg)
         except FileNotFoundError:
             raise RuntimeError(
                 "yt-dlp not found. Install it with: pip install yt-dlp"
