@@ -105,7 +105,20 @@ def download_audio_from_url(url: str, progress_callback=None, cookies_path: Opti
         try:
             if progress_callback:
                 progress_callback(11, "Attempting download with uploaded cookies...")
-            cookie_cmd = base_cmd + ["--cookies", cookies_path]
+            cookie_cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--no-playlist",
+                "-f", "ba/b",
+                "--no-cache-dir",
+                "--no-check-certificate",
+                "--impersonate", "chrome",
+                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "-4",
+                "--cookies", cookies_path,
+                "--output", str(output_path) + ".%(ext)s",
+                "--no-warnings",
+                url,
+            ]
             result = subprocess.run(
                 cookie_cmd,
                 capture_output=True,
@@ -129,7 +142,20 @@ def download_audio_from_url(url: str, progress_callback=None, cookies_path: Opti
         try:
             if progress_callback:
                 progress_callback(14, "Attempting download with Chrome browser cookies...")
-            cookie_cmd = base_cmd + ["--cookies-from-browser", "chrome"]
+            cookie_cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--no-playlist",
+                "-f", "ba/b",
+                "--no-cache-dir",
+                "--no-check-certificate",
+                "--impersonate", "chrome",
+                "--cookies-from-browser", "chrome",
+                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "-4",
+                "--output", str(output_path) + ".%(ext)s",
+                "--no-warnings",
+                url,
+            ]
             result = subprocess.run(
                 cookie_cmd,
                 capture_output=True,
@@ -300,7 +326,21 @@ def extract_metadata(url: str, cookies_path: Optional[str] = None) -> dict:
     # Try 1: Custom cookies file (if uploaded by user)
     if cookies_path and os.path.exists(cookies_path):
         try:
-            cookie_cmd = base_cmd + ["--cookies", cookies_path]
+            cookie_cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--no-download",
+                "--no-cache-dir",
+                "--no-check-certificate",
+                "--impersonate", "chrome",
+                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "-4",
+                "--cookies", cookies_path,
+                "--print", "title",
+                "--print", "duration",
+                "--print", "uploader",
+                "--no-warnings",
+                url,
+            ]
             result = subprocess.run(
                 cookie_cmd, capture_output=True, text=True, timeout=30
             )
@@ -317,7 +357,21 @@ def extract_metadata(url: str, cookies_path: Optional[str] = None) -> dict:
 
     # Try 2: Chrome cookies from browser
     try:
-        cookie_cmd = base_cmd + ["--cookies-from-browser", "chrome"]
+        cookie_cmd = [
+            sys.executable, "-m", "yt_dlp",
+            "--no-download",
+            "--no-cache-dir",
+            "--no-check-certificate",
+            "--impersonate", "chrome",
+            "--cookies-from-browser", "chrome",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "-4",
+            "--print", "title",
+            "--print", "duration",
+            "--print", "uploader",
+            "--no-warnings",
+            url,
+        ]
         result = subprocess.run(
             cookie_cmd, capture_output=True, text=True, timeout=30
         )
