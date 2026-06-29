@@ -141,6 +141,9 @@ transcriber = WhisperXTranscriber(
     max_speakers=MAX_SPEAKERS,
 )
 
+# Concurrency semaphore to prevent parallel heavy model execution causing OOM
+pipeline_semaphore = threading.Semaphore(1)
+
 
 # ─── Routes ─────────────────────────────────────────────────────
 
@@ -159,6 +162,7 @@ async def start_transcription(
     file: Optional[UploadFile] = File(None),
     max_speakers: Optional[int] = Form(None),
     enable_diarization: bool = Form(True),
+    hf_token: Optional[str] = Form(None),
 ):
     """
     Start a transcription job.
@@ -214,80 +218,84 @@ async def start_transcription(
 
     # Run transcription in background thread
     speakers_max = max_speakers or MAX_SPEAKERS
+    user_hf_token = hf_token or HF_TOKEN
 
     def run_pipeline():
         wav_path = None
         try:
-            job.update(5, "Starting pipeline...", "downloading")
+            job.update(2, "Waiting in queue...", "pending")
+            with pipeline_semaphore:
+                job.update(5, "Starting pipeline...", "downloading")
 
-            # Step 1: Get audio
-            if url:
-                source_type = detect_source_type(url)
-                job.update(8, f"Downloading from {source_type}...")
-                wav_path, metadata = download_audio_from_url(
-                    url,
-                    progress_callback=lambda p, m: job.update(p, m, "downloading"),
+                # Step 1: Get audio
+                if url:
+                    source_type = detect_source_type(url)
+                    job.update(8, f"Downloading from {source_type}...")
+                    wav_path, metadata = download_audio_from_url(
+                        url,
+                        progress_callback=lambda p, m: job.update(p, m, "downloading"),
+                    )
+                else:
+                    job.update(8, "Processing uploaded file...")
+                    wav_path, metadata = convert_uploaded_file(
+                        uploaded_file_path,
+                        progress_callback=lambda p, m: job.update(p, m, "downloading"),
+                    )
+
+                # Step 2: Transcribe
+                job.update(28, "Starting WhisperX pipeline...", "transcribing")
+
+                raw_result = transcriber.transcribe(
+                    wav_path,
+                    progress_callback=lambda p, m: job.update(p, m, "transcribing"),
+                    enable_diarization=enable_diarization,
+                    max_speakers=speakers_max,
+                    hf_token=user_hf_token,
                 )
-            else:
-                job.update(8, "Processing uploaded file...")
-                wav_path, metadata = convert_uploaded_file(
-                    uploaded_file_path,
-                    progress_callback=lambda p, m: job.update(p, m, "downloading"),
-                )
 
-            # Step 2: Transcribe
-            job.update(28, "Starting WhisperX pipeline...", "transcribing")
+                # Step 3: Format results
+                job.update(98, "Formatting results...")
+                formatted = format_result_for_frontend(raw_result, metadata)
 
-            raw_result = transcriber.transcribe(
-                wav_path,
-                progress_callback=lambda p, m: job.update(p, m, "transcribing"),
-                enable_diarization=enable_diarization,
-                max_speakers=speakers_max,
-            )
+                # Generate markdown
+                md_content = generate_markdown(formatted)
+                md_path = str(TEMP_DIR / f"{job_id}_transcript.md")
+                with open(md_path, "w", encoding="utf-8") as f:
+                    f.write(md_content)
+                formatted["metadata"]["mdFilePath"] = md_path
 
-            # Step 3: Format results
-            job.update(98, "Formatting results...")
-            formatted = format_result_for_frontend(raw_result, metadata)
+                # Generate srt
+                srt_content = generate_srt(formatted)
+                srt_path = str(TEMP_DIR / f"{job_id}_transcript.srt")
+                with open(srt_path, "w", encoding="utf-8") as f:
+                    f.write(srt_content)
+                formatted["metadata"]["srtFilePath"] = srt_path
 
-            # Generate markdown
-            md_content = generate_markdown(formatted)
-            md_path = str(TEMP_DIR / f"{job_id}_transcript.md")
-            with open(md_path, "w", encoding="utf-8") as f:
-                f.write(md_content)
-            formatted["metadata"]["mdFilePath"] = md_path
+                # Generate vtt
+                vtt_content = generate_vtt(formatted)
+                vtt_path = str(TEMP_DIR / f"{job_id}_transcript.vtt")
+                with open(vtt_path, "w", encoding="utf-8") as f:
+                    f.write(vtt_content)
+                formatted["metadata"]["vttFilePath"] = vtt_path
 
-            # Generate srt
-            srt_content = generate_srt(formatted)
-            srt_path = str(TEMP_DIR / f"{job_id}_transcript.srt")
-            with open(srt_path, "w", encoding="utf-8") as f:
-                f.write(srt_content)
-            formatted["metadata"]["srtFilePath"] = srt_path
+                # Generate txt
+                txt_content = generate_txt(formatted)
+                txt_path = str(TEMP_DIR / f"{job_id}_transcript.txt")
+                with open(txt_path, "w", encoding="utf-8") as f:
+                    f.write(txt_content)
+                formatted["metadata"]["txtFilePath"] = txt_path
 
-            # Generate vtt
-            vtt_content = generate_vtt(formatted)
-            vtt_path = str(TEMP_DIR / f"{job_id}_transcript.vtt")
-            with open(vtt_path, "w", encoding="utf-8") as f:
-                f.write(vtt_content)
-            formatted["metadata"]["vttFilePath"] = vtt_path
+                # Print dialogue transcript directly to console
+                print("\n" + "="*80)
+                print(f"[SUCCESS] TRANSCRIPTION COMPLETED FOR JOB: {job_id}")
+                print(f"Title: {metadata.get('title', 'Unknown') if metadata else 'Unknown'}")
+                print(f"Language: {formatted['metadata']['language'].upper()} | Duration: {formatted['metadata']['totalDurationFormatted']}")
+                print("="*80)
+                for seg in formatted["segments"]:
+                    print(f"[{seg['startFormatted']} -> {seg['endFormatted']}] {seg['speaker']}: {seg['text']}")
+                print("="*80 + "\n")
 
-            # Generate txt
-            txt_content = generate_txt(formatted)
-            txt_path = str(TEMP_DIR / f"{job_id}_transcript.txt")
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(txt_content)
-            formatted["metadata"]["txtFilePath"] = txt_path
-
-            # Print dialogue transcript directly to console
-            print("\n" + "="*80)
-            print(f"[SUCCESS] TRANSCRIPTION COMPLETED FOR JOB: {job_id}")
-            print(f"Title: {metadata.get('title', 'Unknown') if metadata else 'Unknown'}")
-            print(f"Language: {formatted['metadata']['language'].upper()} | Duration: {formatted['metadata']['totalDurationFormatted']}")
-            print("="*80)
-            for seg in formatted["segments"]:
-                print(f"[{seg['startFormatted']} -> {seg['endFormatted']}] {seg['speaker']}: {seg['text']}")
-            print("="*80 + "\n")
-
-            job.complete(formatted)
+                job.complete(formatted)
 
         except Exception as e:
             job.fail(f"Error: {str(e)}")
@@ -297,6 +305,15 @@ async def start_transcription(
                 cleanup_temp_file(wav_path)
             if uploaded_file_path:
                 cleanup_temp_file(uploaded_file_path)
+            
+            # Check if any other job is active
+            active_jobs = [j for j in jobs.values() if j.id != job_id and j.status in ("pending", "downloading", "transcribing")]
+            if not active_jobs:
+                print("[INFO] No active jobs. Releasing transcriber models to free RAM/VRAM...")
+                try:
+                    transcriber.cleanup()
+                except Exception as e:
+                    print(f"[CLEANUP ERROR] Failed to clean up models: {e}")
 
     thread = threading.Thread(target=run_pipeline, daemon=True)
     thread.start()

@@ -416,6 +416,89 @@ class TestTranscriberInit(unittest.TestCase):
         t.cleanup()  # Should not raise
 
 
+class TestTranscriberWordInterpolation(unittest.TestCase):
+    """Test interpolation of missing word timestamps in transcriber."""
+
+    @patch("transcriber.load_audio")
+    @patch("transcriber.WhisperXTranscriber._get_model")
+    def test_word_interpolation(self, mock_get_model, mock_load_audio):
+        from transcriber import WhisperXTranscriber
+        
+        # Setup mock model
+        mock_model = MagicMock()
+        mock_get_model.return_value = mock_model
+        
+        # Setup mock segment and words
+        class FakeWord:
+            def __init__(self, word, start, end, probability=0.9):
+                self.word = word
+                self.start = start
+                self.end = end
+                self.probability = probability
+
+        class FakeSegment:
+            def __init__(self, start, end, text, words):
+                self.start = start
+                self.end = end
+                self.text = text
+                self.words = words
+
+        class FakeInfo:
+            def __init__(self, language="en"):
+                self.language = language
+
+        # Segment with 5 words, where some have None timestamps
+        fake_words = [
+            FakeWord("Hello", None, None),        # Needs interpolation from start (0.0) to word 1 (2.0)
+            FakeWord("world", 2.0, 2.5),
+            FakeWord("how", None, None),         # Needs interpolation from word 1 (2.5) to word 4 (3.5)
+            FakeWord("are", None, None),
+            FakeWord("you", 3.5, 3.9),
+        ]
+        
+        fake_segment = FakeSegment(0.0, 4.0, "Hello world how are you", fake_words)
+        
+        mock_model.transcribe.return_value = ([fake_segment], FakeInfo())
+        
+        t = WhisperXTranscriber(model_name="tiny")
+        res = t.transcribe("dummy_path.wav", enable_diarization=False)
+        
+        # Verify transcription result
+        self.assertIn("segments", res)
+        segments = res["segments"]
+        self.assertEqual(len(segments), 1)
+        
+        # Check words and their interpolated timestamps
+        words = segments[0]["words"]
+        self.assertEqual(len(words), 5)
+        
+        # Hello: start=0.0, end=2.0
+        self.assertEqual(words[0]["word"], "Hello")
+        self.assertEqual(words[0]["start"], 0.0)
+        self.assertEqual(words[0]["end"], 2.0)
+        
+        # world: start=2.0, end=2.5
+        self.assertEqual(words[1]["word"], "world")
+        self.assertEqual(words[1]["start"], 2.0)
+        self.assertEqual(words[1]["end"], 2.5)
+        
+        # how & are: left=2.5, right=3.5, count=2, slot=0.5
+        # how: start=2.5, end=3.0
+        self.assertEqual(words[2]["word"], "how")
+        self.assertEqual(words[2]["start"], 2.5)
+        self.assertEqual(words[2]["end"], 3.0)
+        
+        # are: start=3.0, end=3.5
+        self.assertEqual(words[3]["word"], "are")
+        self.assertEqual(words[3]["start"], 3.0)
+        self.assertEqual(words[3]["end"], 3.5)
+        
+        # you: start=3.5, end=3.9
+        self.assertEqual(words[4]["word"], "you")
+        self.assertEqual(words[4]["start"], 3.5)
+        self.assertEqual(words[4]["end"], 3.9)
+
+
 class TestServerImports(unittest.TestCase):
     """Test that server module can be imported."""
 

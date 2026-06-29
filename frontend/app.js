@@ -55,6 +55,9 @@ const DOM = {
     statLanguage: $('stat-language'),
     optDiarize: $('opt-diarize'),
     optMaxSpeakers: $('opt-max-speakers'),
+    optHfToken: $('opt-hf-token'),
+    warningBanner: $('warning-banner'),
+    warningMessageText: $('warning-message-text'),
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -208,6 +211,11 @@ async function startTranscription() {
     formData.append('enable_diarization', DOM.optDiarize.checked);
     formData.append('max_speakers', DOM.optMaxSpeakers.value);
 
+    const hfTokenVal = DOM.optHfToken.value.trim();
+    if (hfTokenVal) {
+        formData.append('hf_token', hfTokenVal);
+    }
+
     try {
         const resp = await fetch('/api/transcribe', { method: 'POST', body: formData });
         if (!resp.ok) {
@@ -327,6 +335,14 @@ function showResults(result) {
     const meta = result.metadata || {};
     const speakers = result.speakers || [];
     const segments = result.segments || [];
+
+    // Show/hide diarization warning banner
+    if (meta.diarizationError) {
+        DOM.warningMessageText.textContent = meta.diarizationError;
+        DOM.warningBanner.style.display = 'flex';
+    } else {
+        DOM.warningBanner.style.display = 'none';
+    }
 
     // Stats
     DOM.statDuration.textContent = meta.totalDurationFormatted || '--';
@@ -519,6 +535,7 @@ window.resetApp = function() {
 
     DOM.progressSection.style.display = 'none';
     DOM.resultsSection.style.display = 'none';
+    DOM.warningBanner.style.display = 'none';
     DOM.errorSection.style.display = 'none';
     DOM.progressFill.style.width = '0%';
     DOM.progressPercent.textContent = '0%';

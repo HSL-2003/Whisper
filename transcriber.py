@@ -79,6 +79,7 @@ class WhisperXTranscriber:
         enable_diarization: bool = True,
         min_speakers: Optional[int] = None,
         max_speakers: Optional[int] = None,
+        hf_token: Optional[str] = None,
     ) -> dict:
         """Run the full transcription pipeline."""
         if max_speakers is None:
@@ -130,20 +131,73 @@ class WhisperXTranscriber:
                 })
                 continue
 
+            # Convert segment words to dictionaries and interpolate missing timestamps
+            seg_start = segment.start if segment.start is not None else 0.0
+            seg_end = segment.end if segment.end is not None else seg_start + 1.0
+
+            words_list = []
+            for w in segment.words:
+                words_list.append({
+                    "word": str(w.word or "").strip(),
+                    "start": w.start,
+                    "end": w.end,
+                    "probability": round(w.probability, 3) if w.probability is not None else 0.0,
+                })
+
+            # Interpolate missing starts/ends
+            n_words = len(words_list)
+            i_word = 0
+            while i_word < n_words:
+                if words_list[i_word]["start"] is None or words_list[i_word]["end"] is None:
+                    # Find consecutive missing segment
+                    start_idx = i_word
+                    while i_word < n_words and (words_list[i_word]["start"] is None or words_list[i_word]["end"] is None):
+                        i_word += 1
+                    end_idx = i_word  # exclusive boundary of missing group
+
+                    # Determine boundaries
+                    left_time = seg_start
+                    if start_idx > 0:
+                        # Find closest preceding word with valid end
+                        for prev_i in range(start_idx - 1, -1, -1):
+                            if words_list[prev_i]["end"] is not None:
+                                left_time = words_list[prev_i]["end"]
+                                break
+
+                    right_time = seg_end
+                    if end_idx < n_words:
+                        # Find closest succeeding word with valid start
+                        for next_i in range(end_idx, n_words):
+                            if words_list[next_i]["start"] is not None:
+                                right_time = words_list[next_i]["start"]
+                                break
+
+                    if left_time > right_time:
+                        left_time = right_time
+
+                    # Distribute intervals
+                    count = end_idx - start_idx
+                    duration = right_time - left_time
+                    if duration <= 0:
+                        for k in range(start_idx, end_idx):
+                            words_list[k]["start"] = left_time
+                            words_list[k]["end"] = left_time
+                    else:
+                        slot = duration / count
+                        for idx, k in enumerate(range(start_idx, end_idx)):
+                            words_list[k]["start"] = round(left_time + idx * slot, 3)
+                            words_list[k]["end"] = round(left_time + (idx + 1) * slot, 3)
+                else:
+                    i_word += 1
+
             # Split segment by silent gaps to prevent lyrics stretching over long instrumentals
             current_sub_words = []
             max_gap_seconds = 1.5
 
-            for w in segment.words:
-                if w.start is None or w.end is None:
-                    continue
-
-                word_data = {
-                    "word": str(w.word or "").strip(),
-                    "start": round(w.start, 3),
-                    "end": round(w.end, 3),
-                    "probability": round(w.probability, 3),
-                }
+            for word_data in words_list:
+                # Ensure values are rounded properly
+                word_data["start"] = round(word_data["start"], 3)
+                word_data["end"] = round(word_data["end"], 3)
 
                 if not current_sub_words:
                     current_sub_words.append(word_data)
@@ -177,33 +231,36 @@ class WhisperXTranscriber:
         result = {"segments": segments, "language": detected_language}
 
         # ── Step 2: Speaker Diarization (optional) ──────────────
-        if enable_diarization and self.hf_token:
+        run_token = hf_token or self.hf_token
+        if enable_diarization and run_token:
             _p(78, "Loading diarization model (pyannote)...")
             try:
                 result = self._run_diarization(
-                    audio_path, result, min_speakers, max_speakers, _p
+                    audio_path, result, min_speakers, max_speakers, _p, hf_token=run_token
                 )
             except Exception as e:
                 err_msg = str(e)
                 result["diarization_error"] = err_msg
                 _p(96, f"Diarization warning: {err_msg[:100]}...")
         else:
-            reason = "No HF token" if not self.hf_token else "Disabled by user"
+            reason = "No HF token" if not run_token else "Disabled by user"
             _p(96, f"Diarization skipped: {reason}")
 
         _p(100, "Processing complete!")
         return result
 
-    def _run_diarization(self, audio_path, result, min_speakers, max_speakers, _p):
+    def _run_diarization(self, audio_path, result, min_speakers, max_speakers, _p, hf_token):
         """Run pyannote speaker diarization and assign speakers to segments."""
         import torch
         from pyannote.audio import Pipeline
 
-        if self._diarize_pipeline is None:
+        # Re-initialize pipeline if token changes or not yet initialized
+        if self._diarize_pipeline is None or hf_token != getattr(self, "_last_hf_token", None):
             self._diarize_pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
-                token=self.hf_token,
+                token=hf_token,
             )
+            self._last_hf_token = hf_token
             if self.device == "cuda":
                 self._diarize_pipeline = self._diarize_pipeline.to(torch.device("cuda"))
 
@@ -262,7 +319,15 @@ class WhisperXTranscriber:
         return "UNKNOWN"
 
     def cleanup(self):
-        """Free model memory."""
+        """Free model memory and empty PyTorch CUDA cache."""
         self._model = None
         self._diarize_pipeline = None
+        self._last_hf_token = None
+        import gc
         gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass

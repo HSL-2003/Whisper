@@ -163,6 +163,14 @@
                     </div>
                 </div>
 
+                <!-- Advanced Options -->
+                <div class="advanced-options" id="advanced-options">
+                    <div class="hf-token-wrapper">
+                        <label for="opt-hf-token">🔑 Hugging Face Token (Optional override):</label>
+                        <input type="password" id="opt-hf-token" placeholder="Paste your hf_... token to override server credentials" autocomplete="new-password">
+                    </div>
+                </div>
+
                 <!-- Submit Button -->
                 <button class="btn-primary" id="btn-transcribe" disabled>
                     <span class="btn-content">
@@ -227,6 +235,15 @@
 
         <!-- Results Section -->
         <section class="results-section" id="results-section" style="display:none">
+            <!-- Warning Banner -->
+            <div class="warning-banner glass-card" id="warning-banner" style="display:none; align-items: flex-start; gap: 16px;">
+                <div class="warning-icon">⚠️</div>
+                <div class="warning-content">
+                    <h4>Speaker Diarization Warning</h4>
+                    <p id="warning-message-text"></p>
+                </div>
+            </div>
+
             <!-- Stats Bar -->
             <div class="stats-bar" id="stats-bar">
                 <div class="stat-card glass-card">

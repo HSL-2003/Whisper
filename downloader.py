@@ -226,9 +226,11 @@ def extract_metadata(url: str) -> dict:
     """Extract metadata from URL using yt-dlp."""
     try:
         cmd = [
-            "yt-dlp",
+            sys.executable, "-m", "yt_dlp",
             "--no-download",
             "--no-cache-dir",
+            "--no-check-certificate",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "-4",
             "--print", "title",
             "--print", "duration",

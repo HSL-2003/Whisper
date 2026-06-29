@@ -619,3 +619,33 @@ body {
     background: rgba(34, 211, 238, 0.15);
     color: var(--accent-2);
 }
+
+/* ─── Advanced Options ──────────────────────────────────────── */
+.advanced-options {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--glass-border);
+}
+.hf-token-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.hf-token-wrapper label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+.hf-token-wrapper input {
+    background: var(--bg-input);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+.hf-token-wrapper input:focus {
+    border-color: var(--accent-1);
+}
