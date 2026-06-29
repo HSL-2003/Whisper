@@ -83,13 +83,21 @@ def format_result_for_frontend(result: dict, metadata: Optional[dict] = None) ->
         speaker_id = seg.get("speaker", "UNKNOWN")
         speaker_info = speakers.get(speaker_id, {})
         
+        orig_text = seg.get("text", "").strip()
+        trans_text = seg.get("translated_text", "").strip()
+        display_text = orig_text
+        if trans_text:
+            display_text = f"{orig_text}\n({trans_text})"
+
         formatted_seg = {
             "id": i,
             "start": seg.get("start", 0),
             "end": seg.get("end", 0),
             "startFormatted": format_timestamp(seg.get("start", 0)),
             "endFormatted": format_timestamp(seg.get("end", 0)),
-            "text": seg.get("text", "").strip(),
+            "text": display_text,
+            "originalText": orig_text,
+            "translatedText": trans_text,
             "speaker": speaker_id,
             "speakerEmoji": speaker_info.get("emoji", "⚪"),
             "speakerColor": speaker_info.get("color", "#E5E7EB"),

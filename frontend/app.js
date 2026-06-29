@@ -57,6 +57,7 @@ const DOM = {
     optMaxSpeakers: $('opt-max-speakers'),
     optHfToken: $('opt-hf-token'),
     optCookiesFile: $('opt-cookies-file'),
+    optTranslateLang: $('opt-translate-lang'),
     warningBanner: $('warning-banner'),
     warningMessageText: $('warning-message-text'),
 };
@@ -219,6 +220,11 @@ async function startTranscription() {
 
     if (DOM.optCookiesFile.files.length > 0) {
         formData.append('cookies_file', DOM.optCookiesFile.files[0]);
+    }
+
+    const translateLangVal = DOM.optTranslateLang.value;
+    if (translateLangVal) {
+        formData.append('translate_lang', translateLangVal);
     }
 
     try {
@@ -548,6 +554,7 @@ window.resetApp = function() {
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'completed'));
 
     DOM.optCookiesFile.value = '';
+    DOM.optTranslateLang.value = '';
     DOM.inputSection.scrollIntoView({ behavior: 'smooth' });
 };
 

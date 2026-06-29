@@ -164,6 +164,7 @@ async def start_transcription(
     enable_diarization: bool = Form(True),
     hf_token: Optional[str] = Form(None),
     cookies_file: Optional[UploadFile] = File(None),
+    translate_lang: Optional[str] = Form(None),
 ):
     """
     Start a transcription job.
@@ -174,6 +175,7 @@ async def start_transcription(
     print(f"[DEBUG] Audio file: {file.filename if file else 'None'}")
     print(f"[DEBUG] HF Token length: {len(hf_token) if hf_token else 0}")
     print(f"[DEBUG] Cookies file: {cookies_file.filename if cookies_file else 'None'}")
+    print(f"[DEBUG] Translate target: {translate_lang}")
 
     if not url and not file:
         raise HTTPException(status_code=400, detail="Provide either a URL or file")
@@ -278,6 +280,32 @@ async def start_transcription(
                     max_speakers=speakers_max,
                     hf_token=user_hf_token,
                 )
+
+                # Step 2.5: Translate segments if requested
+                if translate_lang and raw_result.get("segments"):
+                    try:
+                        job.update(97, f"Translating transcript into {translate_lang}...")
+                        from deep_translator import GoogleTranslator
+                        translator = GoogleTranslator(source="auto", target=translate_lang)
+                        texts = [seg.get("text", "").strip() for seg in raw_result["segments"] if seg.get("text")]
+                        
+                        if texts:
+                            translated_texts = []
+                            chunk_size = 50
+                            for i in range(0, len(texts), chunk_size):
+                                chunk = texts[i:i+chunk_size]
+                                translated_chunk = translator.translate_sentences(chunk)
+                                translated_texts.extend(translated_chunk)
+                            
+                            idx = 0
+                            for seg in raw_result["segments"]:
+                                if seg.get("text"):
+                                    if idx < len(translated_texts):
+                                        seg["translated_text"] = translated_texts[idx]
+                                        idx += 1
+                        print(f"[DEBUG] Translation completed successfully")
+                    except Exception as e:
+                        print(f"[DEBUG ERROR] Translation failed: {e}")
 
                 # Step 3: Format results
                 job.update(98, "Formatting results...")
