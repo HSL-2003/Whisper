@@ -72,16 +72,16 @@ def download_audio_from_url(url: str, progress_callback=None) -> Tuple[str, dict
     if progress_callback:
         progress_callback(5, f"Detected source: {source_type}")
 
-    # yt-dlp command to download best audio stream without converting in-flight
+    # Base yt-dlp command without cookies
     # Keep safe flags like force-ipv4 and no-cache to avoid triggering DRM protection errors.
-    cmd = [
+    base_cmd = [
         sys.executable, "-m", "yt_dlp",
         "--no-playlist",
         "-f", "ba/b",
         "--no-cache-dir",
         "--no-check-certificate",
         "--impersonate", "chrome",
-        "--extractor-args", "youtube:player_client=ios,mweb",
+        "--extractor-args", "youtube:player_client=ios,android,tv,web_safari",
         "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "-4",
         "--output", str(output_path) + ".%(ext)s",
@@ -92,17 +92,34 @@ def download_audio_from_url(url: str, progress_callback=None) -> Tuple[str, dict
     if progress_callback:
         progress_callback(10, "Downloading audio stream...")
 
+    # Pass current environment containing static-ffmpeg path
+    env = os.environ.copy()
+    
     try:
-        # Pass current environment containing static-ffmpeg path
-        env = os.environ.copy()
+        # Try running with Chrome cookies first
+        if progress_callback:
+            progress_callback(12, "Attempting to download with Chrome cookies...")
+        cookie_cmd = base_cmd + ["--cookies-from-browser", "chrome"]
         result = subprocess.run(
-            cmd,
+            cookie_cmd,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=env
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr)
+    except Exception as e:
+        # Fallback to base command without cookies
+        if progress_callback:
+            progress_callback(15, f"Chrome cookies unavailable or failed: {str(e)[:50]}... Falling back to client emulation...")
+        result = subprocess.run(
+            base_cmd,
             capture_output=True,
             text=True,
             timeout=600,  # 10 minute timeout
             env=env
         )
-        
         if result.returncode != 0:
             raise RuntimeError(f"yt-dlp failed: {result.stderr}")
 
@@ -226,24 +243,43 @@ def get_audio_duration(wav_path: str) -> Optional[float]:
 
 def extract_metadata(url: str) -> dict:
     """Extract metadata from URL using yt-dlp."""
+    base_cmd = [
+        sys.executable, "-m", "yt_dlp",
+        "--no-download",
+        "--no-cache-dir",
+        "--no-check-certificate",
+        "--impersonate", "chrome",
+        "--extractor-args", "youtube:player_client=ios,android,tv,web_safari",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "-4",
+        "--print", "title",
+        "--print", "duration",
+        "--print", "uploader",
+        "--no-warnings",
+        url,
+    ]
+    
+    # Try with Chrome cookies first
     try:
-        cmd = [
-            sys.executable, "-m", "yt_dlp",
-            "--no-download",
-            "--no-cache-dir",
-            "--no-check-certificate",
-            "--impersonate", "chrome",
-            "--extractor-args", "youtube:player_client=ios,mweb",
-            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "-4",
-            "--print", "title",
-            "--print", "duration",
-            "--print", "uploader",
-            "--no-warnings",
-            url,
-        ]
+        cookie_cmd = base_cmd + ["--cookies-from-browser", "chrome"]
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30
+            cookie_cmd, capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            lines = result.stdout.strip().split("\n")
+            return {
+                "title": lines[0] if len(lines) > 0 else "Unknown",
+                "duration": float(lines[1]) if len(lines) > 1 and lines[1].replace(".", "").isdigit() else None,
+                "uploader": lines[2] if len(lines) > 2 else "Unknown",
+                "source": url,
+            }
+    except Exception:
+        pass
+        
+    # Fallback to without cookies
+    try:
+        result = subprocess.run(
+            base_cmd, capture_output=True, text=True, timeout=30
         )
         if result.returncode == 0:
             lines = result.stdout.strip().split("\n")
