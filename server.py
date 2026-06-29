@@ -169,6 +169,12 @@ async def start_transcription(
     Start a transcription job.
     Either provide a URL (YouTube/TikTok/Vimeo) or upload a file (MP4/MOV/MP3/WAV).
     """
+    print(f"\n[DEBUG] === API/TRANSCRIBE CALL ===")
+    print(f"[DEBUG] URL: {url}")
+    print(f"[DEBUG] Audio file: {file.filename if file else 'None'}")
+    print(f"[DEBUG] HF Token length: {len(hf_token) if hf_token else 0}")
+    print(f"[DEBUG] Cookies file: {cookies_file.filename if cookies_file else 'None'}")
+
     if not url and not file:
         raise HTTPException(status_code=400, detail="Provide either a URL or file")
 
@@ -221,11 +227,14 @@ async def start_transcription(
     cookies_file_path = None
     if cookies_file:
         cookies_file_path = str(TEMP_DIR / f"{job_id}_cookies.txt")
+        print(f"[DEBUG] Saving cookies file to: {cookies_file_path}")
         try:
             content = await cookies_file.read()
             with open(cookies_file_path, "wb") as f:
                 f.write(content)
+            print(f"[DEBUG] Cookies file saved successfully. Size: {len(content)} bytes")
         except Exception as e:
+            print(f"[DEBUG ERROR] Failed to save cookies file: {e}")
             cleanup_temp_file(uploaded_file_path)
             raise HTTPException(status_code=500, detail=f"Failed to save cookies file: {e}")
 
@@ -244,6 +253,9 @@ async def start_transcription(
                 if url:
                     source_type = detect_source_type(url)
                     job.update(8, f"Downloading from {source_type}...")
+                    import os
+                    print(f"[DEBUG] Calling download_audio_from_url with cookies_path: {cookies_file_path}")
+                    print(f"[DEBUG] Cookies file exists on disk: {os.path.exists(cookies_file_path) if cookies_file_path else False}")
                     wav_path, metadata = download_audio_from_url(
                         url,
                         progress_callback=lambda p, m: job.update(p, m, "downloading"),
