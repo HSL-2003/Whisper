@@ -56,6 +56,7 @@ const DOM = {
     optDiarize: $('opt-diarize'),
     optMaxSpeakers: $('opt-max-speakers'),
     optHfToken: $('opt-hf-token'),
+    optCookiesFile: $('opt-cookies-file'),
     warningBanner: $('warning-banner'),
     warningMessageText: $('warning-message-text'),
 };
@@ -214,6 +215,10 @@ async function startTranscription() {
     const hfTokenVal = DOM.optHfToken.value.trim();
     if (hfTokenVal) {
         formData.append('hf_token', hfTokenVal);
+    }
+
+    if (DOM.optCookiesFile.files.length > 0) {
+        formData.append('cookies_file', DOM.optCookiesFile.files[0]);
     }
 
     try {
@@ -542,6 +547,7 @@ window.resetApp = function() {
 
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'completed'));
 
+    DOM.optCookiesFile.value = '';
     DOM.inputSection.scrollIntoView({ behavior: 'smooth' });
 };
 

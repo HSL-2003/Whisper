@@ -52,13 +52,14 @@ def detect_source_type(url: str) -> str:
     return "unknown"
 
 
-def download_audio_from_url(url: str, progress_callback=None) -> Tuple[str, dict]:
+def download_audio_from_url(url: str, progress_callback=None, cookies_path: Optional[str] = None) -> Tuple[str, dict]:
     """
     Download audio from a URL using yt-dlp.
     
     Args:
         url: The URL to download from
         progress_callback: Optional callback(percent, status_text)
+        cookies_path: Optional path to cookies.txt file
     
     Returns:
         Tuple of (wav_file_path, metadata_dict)
@@ -95,40 +96,71 @@ def download_audio_from_url(url: str, progress_callback=None) -> Tuple[str, dict
     # Pass current environment containing static-ffmpeg path
     env = os.environ.copy()
     
-    try:
-        # Try running with Chrome cookies first
-        if progress_callback:
-            progress_callback(12, "Attempting to download with Chrome cookies...")
-        cookie_cmd = base_cmd + ["--cookies-from-browser", "chrome"]
-        result = subprocess.run(
-            cookie_cmd,
-            capture_output=True,
-            text=True,
-            timeout=600,
-            env=env
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr)
-    except Exception as e:
-        # Fallback to base command without cookies
-        if progress_callback:
-            progress_callback(15, f"Chrome cookies unavailable or failed: {str(e)[:50]}... Falling back to client emulation...")
-        result = subprocess.run(
-            base_cmd,
-            capture_output=True,
-            text=True,
-            timeout=600,  # 10 minute timeout
-            env=env
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"yt-dlp failed: {result.stderr}")
+    success = False
+    result = None
+    
+    # Try 1: Custom cookies file (if uploaded by user)
+    if cookies_path and os.path.exists(cookies_path):
+        try:
+            if progress_callback:
+                progress_callback(11, "Attempting download with uploaded cookies...")
+            cookie_cmd = base_cmd + ["--cookies", cookies_path]
+            result = subprocess.run(
+                cookie_cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,
+                env=env
+            )
+            if result.returncode == 0:
+                success = True
+            else:
+                if progress_callback:
+                    progress_callback(13, f"Uploaded cookies failed, trying Chrome browser cookies...")
+        except Exception as e:
+            if progress_callback:
+                progress_callback(13, f"Uploaded cookies error: {str(e)[:40]}")
 
-    except FileNotFoundError:
-        raise RuntimeError(
-            "yt-dlp not found. Install it with: pip install yt-dlp"
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Download timed out (>10 minutes)")
+    # Try 2: Local Chrome browser cookies
+    if not success:
+        try:
+            if progress_callback:
+                progress_callback(14, "Attempting download with Chrome browser cookies...")
+            cookie_cmd = base_cmd + ["--cookies-from-browser", "chrome"]
+            result = subprocess.run(
+                cookie_cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,
+                env=env
+            )
+            if result.returncode == 0:
+                success = True
+        except Exception:
+            pass
+
+    # Try 3: Base command (client emulation fallback)
+    if not success:
+        try:
+            if progress_callback:
+                progress_callback(16, "Chrome cookies unavailable. Falling back to player_client emulation...")
+            result = subprocess.run(
+                base_cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minute timeout
+                env=env
+            )
+            if result.returncode == 0:
+                success = True
+            else:
+                raise RuntimeError(result.stderr)
+        except FileNotFoundError:
+            raise RuntimeError(
+                "yt-dlp not found. Install it with: pip install yt-dlp"
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Download timed out (>10 minutes)")
 
     # Find the downloaded raw audio file
     downloaded_file = None
@@ -159,7 +191,7 @@ def download_audio_from_url(url: str, progress_callback=None) -> Tuple[str, dict
         progress_callback(25, "Audio downloaded and converted successfully")
 
     # Extract metadata
-    metadata = extract_metadata(url)
+    metadata = extract_metadata(url, cookies_path=cookies_path)
 
     return wav_path, metadata
 
@@ -241,7 +273,7 @@ def get_audio_duration(wav_path: str) -> Optional[float]:
     return None
 
 
-def extract_metadata(url: str) -> dict:
+def extract_metadata(url: str, cookies_path: Optional[str] = None) -> dict:
     """Extract metadata from URL using yt-dlp."""
     base_cmd = [
         sys.executable, "-m", "yt_dlp",
@@ -259,7 +291,25 @@ def extract_metadata(url: str) -> dict:
         url,
     ]
     
-    # Try with Chrome cookies first
+    # Try 1: Custom cookies file (if uploaded by user)
+    if cookies_path and os.path.exists(cookies_path):
+        try:
+            cookie_cmd = base_cmd + ["--cookies", cookies_path]
+            result = subprocess.run(
+                cookie_cmd, capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                lines = result.stdout.strip().split("\n")
+                return {
+                    "title": lines[0] if len(lines) > 0 else "Unknown",
+                    "duration": float(lines[1]) if len(lines) > 1 and lines[1].replace(".", "").isdigit() else None,
+                    "uploader": lines[2] if len(lines) > 2 else "Unknown",
+                    "source": url,
+                }
+        except Exception:
+            pass
+
+    # Try 2: Chrome cookies from browser
     try:
         cookie_cmd = base_cmd + ["--cookies-from-browser", "chrome"]
         result = subprocess.run(
@@ -276,7 +326,7 @@ def extract_metadata(url: str) -> dict:
     except Exception:
         pass
         
-    # Fallback to without cookies
+    # Try 3: Fallback to without cookies
     try:
         result = subprocess.run(
             base_cmd, capture_output=True, text=True, timeout=30

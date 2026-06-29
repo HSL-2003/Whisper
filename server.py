@@ -163,6 +163,7 @@ async def start_transcription(
     max_speakers: Optional[int] = Form(None),
     enable_diarization: bool = Form(True),
     hf_token: Optional[str] = Form(None),
+    cookies_file: Optional[UploadFile] = File(None),
 ):
     """
     Start a transcription job.
@@ -216,6 +217,18 @@ async def start_transcription(
             cleanup_temp_file(uploaded_file_path)
             raise e
 
+    # Handle cookies file upload if provided
+    cookies_file_path = None
+    if cookies_file:
+        cookies_file_path = str(TEMP_DIR / f"{job_id}_cookies.txt")
+        try:
+            content = await cookies_file.read()
+            with open(cookies_file_path, "wb") as f:
+                f.write(content)
+        except Exception as e:
+            cleanup_temp_file(uploaded_file_path)
+            raise HTTPException(status_code=500, detail=f"Failed to save cookies file: {e}")
+
     # Run transcription in background thread
     speakers_max = max_speakers or MAX_SPEAKERS
     user_hf_token = hf_token or HF_TOKEN
@@ -234,6 +247,7 @@ async def start_transcription(
                     wav_path, metadata = download_audio_from_url(
                         url,
                         progress_callback=lambda p, m: job.update(p, m, "downloading"),
+                        cookies_path=cookies_file_path,
                     )
                 else:
                     job.update(8, "Processing uploaded file...")
@@ -305,6 +319,8 @@ async def start_transcription(
                 cleanup_temp_file(wav_path)
             if uploaded_file_path:
                 cleanup_temp_file(uploaded_file_path)
+            if cookies_file_path:
+                cleanup_temp_file(cookies_file_path)
             
             # Check if any other job is active
             active_jobs = [j for j in jobs.values() if j.id != job_id and j.status in ("pending", "downloading", "transcribing")]

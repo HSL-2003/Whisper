@@ -276,6 +276,9 @@ class WhisperXTranscriber:
             max_speakers=max_speakers,
         )
 
+        if hasattr(diarize_result, "speaker_diarization"):
+            diarize_result = diarize_result.speaker_diarization
+
         _p(92, "Assigning speakers to segments...")
 
         # Build diarization intervals
