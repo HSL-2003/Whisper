@@ -31,8 +31,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application files and change ownership to the non-root user
 COPY --chown=user . $HOME/app
 
-# Ensure cache directories are writable by the user
-RUN mkdir -p $HOME/.cache && chmod -R 777 $HOME/.cache
+# Ensure temp directory exists and the entire app folder is owned by user
+RUN mkdir -p $HOME/app/temp && chown -R user:user $HOME/app
+
+# Ensure cache directories are writable and owned by the user
+RUN mkdir -p $HOME/.cache && chown -R user:user $HOME/.cache
 
 # Switch to the non-root user
 USER user
