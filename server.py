@@ -84,6 +84,8 @@ class Job:
         self.progress = 0.0
         self.message = "Initializing..."
         self.result = None
+        self.raw_result = None
+        self.metadata = None
         self.error = None
         self.created_at = time.time()
         self.events = []  # list of SSE events to send
@@ -156,6 +158,98 @@ async def serve_index():
     return HTMLResponse(content="<h1>Frontend not found</h1>", status_code=404)
 
 
+from pydantic import BaseModel
+
+class TranslateRequest(BaseModel):
+    job_id: str
+    target_lang: str
+
+def translate_segments(segments: list[dict], target_lang: str) -> bool:
+    """
+    Translate segments list in-place using parallel ThreadPoolExecutor.
+    """
+    if not target_lang:
+        for seg in segments:
+            seg["translated_text"] = ""
+        return True
+
+    texts = [seg.get("text", "").strip() for seg in segments if seg.get("text")]
+    if not texts:
+        return True
+
+    from deep_translator import GoogleTranslator, MyMemoryTranslator
+    from concurrent.futures import ThreadPoolExecutor
+
+    chunk_size = 50
+    chunks = [texts[i:i+chunk_size] for i in range(0, len(texts), chunk_size)]
+    translated_texts = [None] * len(chunks)
+
+    def translate_chunk(idx, chunk):
+        try:
+            translator = GoogleTranslator(source="auto", target=target_lang)
+            return translator.translate_batch(chunk)
+        except Exception as google_err:
+            print(f"[DEBUG WARNING] Google Translate chunk {idx} failed: {google_err}. Trying MyMemory...")
+            try:
+                translator = MyMemoryTranslator(source="auto", target=target_lang)
+                return [translator.translate(text) for text in chunk]
+            except Exception as mymem_err:
+                print(f"[DEBUG ERROR] MyMemory chunk {idx} failed: {mymem_err}")
+                raise
+
+    try:
+        with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+            futures = [executor.submit(translate_chunk, idx, chunk) for idx, chunk in enumerate(chunks)]
+            for idx, future in enumerate(futures):
+                translated_texts[idx] = future.result()
+        
+        all_translated = []
+        for t_list in translated_texts:
+            if t_list:
+                all_translated.extend(t_list)
+
+        if len(all_translated) == len(texts):
+            idx = 0
+            for seg in segments:
+                if seg.get("text"):
+                    seg["translated_text"] = all_translated[idx]
+                    idx += 1
+            return True
+    except Exception as e:
+        print(f"[DEBUG ERROR] translate_segments failed: {e}")
+        
+    return False
+
+def save_export_files(job_id: str, formatted: dict):
+    # Generate markdown
+    md_content = generate_markdown(formatted)
+    md_path = str(TEMP_DIR / f"{job_id}_transcript.md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md_content)
+    formatted["metadata"]["mdFilePath"] = md_path
+
+    # Generate srt
+    srt_content = generate_srt(formatted)
+    srt_path = str(TEMP_DIR / f"{job_id}_transcript.srt")
+    with open(srt_path, "w", encoding="utf-8") as f:
+        f.write(srt_content)
+    formatted["metadata"]["srtFilePath"] = srt_path
+
+    # Generate vtt
+    vtt_content = generate_vtt(formatted)
+    vtt_path = str(TEMP_DIR / f"{job_id}_transcript.vtt")
+    with open(vtt_path, "w", encoding="utf-8") as f:
+        f.write(vtt_content)
+    formatted["metadata"]["vttFilePath"] = vtt_path
+
+    # Generate txt
+    txt_content = generate_txt(formatted)
+    txt_path = str(TEMP_DIR / f"{job_id}_transcript.txt")
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write(txt_content)
+    formatted["metadata"]["txtFilePath"] = txt_path
+
+
 @app.post("/api/transcribe")
 async def start_transcription(
     url: Optional[str] = Form(None),
@@ -164,6 +258,7 @@ async def start_transcription(
     enable_diarization: bool = Form(True),
     hf_token: Optional[str] = Form(None),
     cookies_file: Optional[UploadFile] = File(None),
+    translate_lang: Optional[str] = Form(None),
 ):
     """
     Start a transcription job.
@@ -174,6 +269,7 @@ async def start_transcription(
     print(f"[DEBUG] Audio file: {file.filename if file else 'None'}")
     print(f"[DEBUG] HF Token length: {len(hf_token) if hf_token else 0}")
     print(f"[DEBUG] Cookies file: {cookies_file.filename if cookies_file else 'None'}")
+    print(f"[DEBUG] Translate target: {translate_lang}")
 
     if not url and not file:
         raise HTTPException(status_code=400, detail="Provide either a URL or file")
@@ -279,37 +375,21 @@ async def start_transcription(
                     hf_token=user_hf_token,
                 )
 
+                # Step 2.5: Translate segments if requested
+                if translate_lang and raw_result.get("segments"):
+                    job.update(97, f"Translating transcript into {translate_lang}...")
+                    translate_segments(raw_result["segments"], translate_lang)
+
                 # Step 3: Format results
                 job.update(98, "Formatting results...")
                 formatted = format_result_for_frontend(raw_result, metadata)
 
-                # Generate markdown
-                md_content = generate_markdown(formatted)
-                md_path = str(TEMP_DIR / f"{job_id}_transcript.md")
-                with open(md_path, "w", encoding="utf-8") as f:
-                    f.write(md_content)
-                formatted["metadata"]["mdFilePath"] = md_path
+                # Save export files
+                save_export_files(job_id, formatted)
 
-                # Generate srt
-                srt_content = generate_srt(formatted)
-                srt_path = str(TEMP_DIR / f"{job_id}_transcript.srt")
-                with open(srt_path, "w", encoding="utf-8") as f:
-                    f.write(srt_content)
-                formatted["metadata"]["srtFilePath"] = srt_path
-
-                # Generate vtt
-                vtt_content = generate_vtt(formatted)
-                vtt_path = str(TEMP_DIR / f"{job_id}_transcript.vtt")
-                with open(vtt_path, "w", encoding="utf-8") as f:
-                    f.write(vtt_content)
-                formatted["metadata"]["vttFilePath"] = vtt_path
-
-                # Generate txt
-                txt_content = generate_txt(formatted)
-                txt_path = str(TEMP_DIR / f"{job_id}_transcript.txt")
-                with open(txt_path, "w", encoding="utf-8") as f:
-                    f.write(txt_content)
-                formatted["metadata"]["txtFilePath"] = txt_path
+                # Save raw result and metadata for on-the-fly translation
+                job.raw_result = raw_result
+                job.metadata = metadata
 
                 # Print dialogue transcript directly to console
                 print("\n" + "="*80)
@@ -400,6 +480,40 @@ async def get_result(job_id: str):
         return {"status": job.status, "progress": job.progress, "message": job.message}
 
     return job.result
+
+
+@app.post("/api/translate")
+async def translate_transcript(request: TranslateRequest):
+    job_id = request.job_id
+    target_lang = request.target_lang
+    
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    job = jobs[job_id]
+    if job.status != "done" or not hasattr(job, "raw_result") or not job.raw_result:
+        raise HTTPException(status_code=400, detail="Job not completed or result unavailable")
+        
+    raw_result = job.raw_result
+    metadata = job.metadata
+    
+    try:
+        # If empty target_lang, clear previous translations
+        if not target_lang:
+            for seg in raw_result["segments"]:
+                seg["translated_text"] = ""
+        else:
+            translate_segments(raw_result["segments"], target_lang)
+                        
+        # Re-format and re-generate export files
+        formatted = format_result_for_frontend(raw_result, metadata)
+        save_export_files(job_id, formatted)
+        
+        # Update completed result
+        job.result = formatted
+        return {"status": "success", "result": formatted}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/transcribe/{job_id}/download")

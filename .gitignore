@@ -2,3 +2,23 @@
 temp/
 __pycache__/
 *.pyc
+.agents/
+
+# Media & Uploads
+*.webm
+*.mp4
+*.mp3
+*.wav
+*.mov
+*.m4a
+*.flac
+
+# Sensitive Credentials
+*cookies*.txt
+cookies.txt
+
+# IDEs & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

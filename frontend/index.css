@@ -158,7 +158,7 @@ body {
 }
 .tab-btn {
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
-    padding: 10px 16px;
+    padding: 10px 16px; min-height: 44px;
     border: none; border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-muted);
@@ -242,11 +242,24 @@ body {
 .file-info { display: flex; align-items: center; gap: 10px; color: var(--text-primary); font-size: 0.85rem; }
 #file-size { color: var(--text-muted); font-size: 0.78rem; }
 .btn-remove-file {
-    background: none; border: none; color: var(--text-muted);
-    cursor: pointer; font-size: 1rem; padding: 4px;
-    transition: color var(--transition-fast);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
 }
-.btn-remove-file:hover { color: #f87171; }
+.btn-remove-file:hover {
+    background: rgba(248, 113, 113, 0.15);
+    border-color: rgba(248, 113, 113, 0.3);
+    color: #f87171;
+}
 
 /* ─── Options Bar ───────────────────────────────────────────── */
 .options-bar {
@@ -287,7 +300,8 @@ body {
     font-size: 0.84rem; color: var(--text-secondary);
 }
 .speakers-option select, .filter-select {
-    padding: 6px 10px;
+    padding: 10px 14px;
+    min-height: 44px;
     background: var(--bg-input);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: var(--radius-sm);
@@ -330,6 +344,7 @@ body {
 .btn-secondary {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 8px 16px;
+    min-height: 44px;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: var(--radius-sm);
@@ -648,4 +663,159 @@ body {
 }
 .hf-token-wrapper input:focus {
     border-color: var(--accent-1);
+}
+
+/* ─── 3D Stream Canvas & Sections ───────────────────────────── */
+#stream-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1; /* Under content, above mesh */
+    pointer-events: none;
+}
+
+/* Ensure background mesh is below canvas */
+.bg-mesh, .bg-grid {
+    z-index: 0 !important;
+}
+
+/* Ensure sections are positioned relatively to stack above canvas */
+.hero-overlay, .app-section {
+    position: relative;
+    z-index: 5;
+}
+
+/* ─── Hero Overlay ─────────────────────────────────────────── */
+.hero-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    pointer-events: none; /* Let clicks pass through */
+    text-align: center;
+    box-sizing: border-box;
+    padding: 20px;
+    will-change: opacity, transform;
+}
+
+.hero-title-large {
+    font-size: clamp(3.5rem, 10vw, 6.5rem);
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 24px;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #ffffff 30%, #818CF8 70%, #22D3EE 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 30px rgba(129, 140, 248, 0.25));
+    animation: scaleFadeIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.hero-subtitle-large {
+    font-size: clamp(1.1rem, 2.5vw, 1.6rem);
+    color: var(--text-secondary);
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    max-width: 600px;
+    margin-bottom: 48px;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    animation: fadeInDelayed 1s 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.scroll-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    opacity: 0;
+    animation: fadeInDelayed 1s 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mouse-icon {
+    width: 24px;
+    height: 40px;
+    border: 2px solid var(--text-muted);
+    border-radius: 12px;
+    position: relative;
+}
+
+.mouse-icon .wheel {
+    width: 4px;
+    height: 8px;
+    background-color: var(--text-muted);
+    border-radius: 2px;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: scrollMouseWheel 1.6s ease-in-out infinite;
+}
+
+@keyframes scaleFadeIn {
+    from { opacity: 0; transform: scale(0.9) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes fadeInDelayed {
+    to { opacity: 1; }
+}
+
+@keyframes scrollMouseWheel {
+    0% { top: 6px; opacity: 1; }
+    50% { top: 16px; opacity: 0; }
+    100% { top: 6px; opacity: 1; }
+}
+
+/* ─── App Section (Reveal on Scroll) ─────────────────────────── */
+.app-section {
+    margin-top: 75vh; /* Push down to allow initial scroll space */
+    padding-bottom: 120px;
+    min-height: 100vh;
+    opacity: 0;
+    filter: brightness(0.2) blur(12px);
+    transform: scale(0.95);
+    will-change: opacity, transform, filter;
+    transition: opacity 0.15s ease-out, filter 0.15s ease-out, transform 0.15s ease-out;
+}
+
+/* ─── Keyboard Accessibility & Title Icons ──────────────────── */
+button:focus-visible, 
+input:focus-visible, 
+select:focus-visible, 
+.drop-zone:focus-visible {
+    outline: 2px solid var(--accent-2) !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.25) !important;
+}
+input:focus, select:focus {
+    outline: none;
+}
+.title-icon {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+    color: var(--accent-1);
+}
+.spin-slow {
+    animation: spin 8s linear infinite;
+}
+.caution-icon {
+    color: #f59e0b; /* warning amber */
+}
+.error-card .error-icon svg {
+    color: #ef4444; /* error red */
+    margin: 0 auto;
 }

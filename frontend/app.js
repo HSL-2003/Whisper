@@ -57,6 +57,8 @@ const DOM = {
     optMaxSpeakers: $('opt-max-speakers'),
     optHfToken: $('opt-hf-token'),
     optCookiesFile: $('opt-cookies-file'),
+    optTranslateLang: $('opt-translate-lang'),
+    resultsTranslateLang: $('results-translate-lang'),
     warningBanner: $('warning-banner'),
     warningMessageText: $('warning-message-text'),
 };
@@ -123,6 +125,14 @@ DOM.urlInput.addEventListener('paste', (e) => {
 // File Upload & Drag/Drop
 // ══════════════════════════════════════════════════════════════
 DOM.dropZone.addEventListener('click', () => DOM.fileInput.click());
+
+// Keyboard accessibility for drag and drop zone
+DOM.dropZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        DOM.fileInput.click();
+    }
+});
 
 DOM.dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -219,6 +229,11 @@ async function startTranscription() {
 
     if (DOM.optCookiesFile.files.length > 0) {
         formData.append('cookies_file', DOM.optCookiesFile.files[0]);
+    }
+
+    const translateLangVal = DOM.optTranslateLang.value;
+    if (translateLangVal) {
+        formData.append('translate_lang', translateLangVal);
     }
 
     try {
@@ -341,6 +356,9 @@ function showResults(result) {
     const speakers = result.speakers || [];
     const segments = result.segments || [];
 
+    // Sync translation dropdown values
+    DOM.resultsTranslateLang.value = DOM.optTranslateLang.value;
+
     // Show/hide diarization warning banner
     if (meta.diarizationError) {
         DOM.warningMessageText.textContent = meta.diarizationError;
@@ -424,11 +442,21 @@ function renderTranscript(segments, searchTerm = '', speakerFilter = '') {
                 return `<span class="word-span" title="${tooltip}">${highlightedWord}</span>`;
             }).join(' ');
         } else {
-            textHtml = escapeHtml(seg.text);
+            textHtml = escapeHtml(seg.originalText || seg.text);
             if (searchTerm) {
                 const re = new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi');
                 textHtml = textHtml.replace(re, '<mark>$1</mark>');
             }
+        }
+
+        let translationHtml = '';
+        if (seg.translatedText) {
+            let transTextEscaped = escapeHtml(seg.translatedText);
+            if (searchTerm) {
+                const re = new RegExp(`(${escapeRegExp(searchTerm)})`, 'gi');
+                transTextEscaped = transTextEscaped.replace(re, '<mark>$1</mark>');
+            }
+            translationHtml = `<div class="segment-translation" style="margin-top: 6px; font-size: 0.85rem; color: var(--text-secondary); font-style: italic; border-left: 2px solid var(--accent-1); padding-left: 8px; white-space: pre-wrap;">${transTextEscaped}</div>`;
         }
 
         div.innerHTML = `
@@ -439,6 +467,7 @@ function renderTranscript(segments, searchTerm = '', speakerFilter = '') {
             <div class="segment-content">
                 <div class="segment-time">${seg.startFormatted} → ${seg.endFormatted}</div>
                 <div class="segment-text">${textHtml}</div>
+                ${translationHtml}
             </div>
             <button class="segment-copy" title="Copy text" onclick="copySegment(${seg.id})">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -459,6 +488,48 @@ DOM.searchInput.addEventListener('input', () => {
     searchDebounce = setTimeout(filterTranscript, 250);
 });
 DOM.filterSpeaker.addEventListener('change', filterTranscript);
+
+DOM.resultsTranslateLang.addEventListener('change', async () => {
+    if (!state.currentJobId) return;
+    const targetLang = DOM.resultsTranslateLang.value;
+    
+    // Disable selector and show translating text
+    DOM.resultsTranslateLang.disabled = true;
+    const originalText = DOM.resultsTranslateLang.options[DOM.resultsTranslateLang.selectedIndex].text;
+    DOM.resultsTranslateLang.options[DOM.resultsTranslateLang.selectedIndex].text = 'Translating...';
+    
+    try {
+        const resp = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                job_id: state.currentJobId,
+                target_lang: targetLang
+            })
+        });
+        
+        if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.detail || 'Translation failed');
+        }
+        
+        const data = await resp.json();
+        if (data.status === 'success') {
+            state.result = data.result;
+            // Re-render transcript timeline
+            filterTranscript();
+            // Sync with options dropdown for consistency
+            DOM.optTranslateLang.value = targetLang;
+        }
+    } catch (err) {
+        alert('Translation failed: ' + err.message);
+        // Reset dropdown value to previous state
+        DOM.resultsTranslateLang.value = DOM.optTranslateLang.value;
+    } finally {
+        DOM.resultsTranslateLang.options[DOM.resultsTranslateLang.selectedIndex].text = originalText;
+        DOM.resultsTranslateLang.disabled = false;
+    }
+});
 
 function filterTranscript() {
     if (!state.result) return;
@@ -548,6 +619,8 @@ window.resetApp = function() {
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'completed'));
 
     DOM.optCookiesFile.value = '';
+    DOM.optTranslateLang.value = '';
+    DOM.resultsTranslateLang.value = '';
     DOM.inputSection.scrollIntoView({ behavior: 'smooth' });
 };
 

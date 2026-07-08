@@ -629,6 +629,80 @@ class TestServerAPI(unittest.TestCase):
         
         self.assertIn("[00:00:01 -> 00:00:03] SPEAKER_00: Hello world", txt)
 
+    def test_translation_formatting_dual_subtitles(self):
+        from formatter import format_result_for_frontend, generate_srt, generate_vtt, generate_txt
+        dummy_raw = {
+            "segments": [
+                {
+                    "start": 1.0,
+                    "end": 2.0,
+                    "text": "Hello",
+                    "speaker": "SPEAKER_00",
+                    "translated_text": "Xin chào"
+                }
+            ]
+        }
+        formatted = format_result_for_frontend(dummy_raw, {"title": "Test"})
+        
+        # Verify text format includes translation in parentheses
+        self.assertEqual(formatted["segments"][0]["text"], "Hello\n(Xin chào)")
+        self.assertEqual(formatted["segments"][0]["originalText"], "Hello")
+        self.assertEqual(formatted["segments"][0]["translatedText"], "Xin chào")
+        
+        # Verify generated SRT and VTT formats include translation
+        srt = generate_srt(formatted)
+        vtt = generate_vtt(formatted)
+        txt = generate_txt(formatted)
+        
+        self.assertIn("Hello\n(Xin chào)", srt)
+        self.assertIn("Hello\n(Xin chào)", vtt)
+        self.assertIn("Hello\n(Xin chào)", txt)
+
+    @patch("server.jobs")
+    def test_api_translate_endpoint(self, mock_jobs):
+        if not self.client:
+            self.skipTest("TestClient not available")
+            
+        from server import Job
+        job_id = "test-job-translate"
+        job = Job(job_id, "test.mp3")
+        job.status = "done"
+        job.raw_result = {
+            "segments": [
+                {"start": 0.0, "end": 2.0, "text": "Goodbye", "speaker": "SPEAKER_00"}
+            ]
+        }
+        job.metadata = {"title": "Goodbye Video"}
+        
+        # Populate mock_jobs dictionary
+        mock_jobs.__contains__.side_effect = lambda k: k == job_id
+        mock_jobs.__getitem__.side_effect = lambda k: job if k == job_id else None
+        
+        with patch("deep_translator.GoogleTranslator.translate_batch") as mock_translate:
+            mock_translate.return_value = ["Tạm biệt"]
+            
+            resp = self.client.post(
+                "/api/translate",
+                json={"job_id": job_id, "target_lang": "vi"}
+            )
+            
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertEqual(data["status"], "success")
+            self.assertEqual(data["result"]["segments"][0]["text"], "Goodbye\n(Tạm biệt)")
+            
+            # Verify the files were generated and paths populated
+            meta = data["result"]["metadata"]
+            self.assertIn("srtFilePath", meta)
+            self.assertIn("vttFilePath", meta)
+            self.assertIn("txtFilePath", meta)
+            self.assertIn("mdFilePath", meta)
+            
+            # Read and verify SRT content contains translated line
+            with open(meta["srtFilePath"], "r", encoding="utf-8") as f:
+                srt_content = f.read()
+                self.assertIn("Goodbye\n(Tạm biệt)", srt_content)
+
 
 if __name__ == "__main__":
     # Ensure temp dir exists
