@@ -11,24 +11,31 @@ RUN apt-get update && apt-get install -y \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up working directory
-WORKDIR /app
+# Set up a new user named "user" with UID 1000 to comply with Hugging Face Spaces
+RUN useradd -m -u 1000 user
 
-# Copy requirements file
+# Set environment variables for HF and home directory
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    PORT=7860 \
+    FRONTEND_DIR=/home/user/app/frontend \
+    PYTHONUNBUFFERED=1
+
+# Set up working directory inside user's home
+WORKDIR $HOME/app
+
+# Copy requirements file and install dependencies as root (to cache them globally)
 COPY requirements.txt .
-
-# Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
-COPY . .
+# Copy the rest of the application files and change ownership to the non-root user
+COPY --chown=user . $HOME/app
 
-# Ensure temp directory exists and is fully writable
-RUN mkdir -p /app/temp && chmod 777 /app/temp
+# Ensure cache directories are writable by the user
+RUN mkdir -p $HOME/.cache && chmod -R 777 $HOME/.cache
 
-# Set environment variables
-ENV PORT=7860
-ENV FRONTEND_DIR=/app/frontend
+# Switch to the non-root user
+USER user
 
 # Expose the default Hugging Face Spaces port
 EXPOSE 7860
