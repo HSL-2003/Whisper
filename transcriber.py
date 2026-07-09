@@ -3,6 +3,7 @@ WhisperX-style Transcriber Module
 Uses faster-whisper directly for ASR + torchaudio for alignment.
 Compatible with Python 3.14+.
 """
+print("[DEBUG STARTUP] Entering transcriber.py...")
 
 import gc
 import os
@@ -13,6 +14,7 @@ from typing import Optional, Callable
 import numpy as np
 
 warnings.filterwarnings("ignore")
+print("[DEBUG STARTUP] transcriber.py: Standard modules and numpy imported successfully.")
 
 ProgressCallback = Callable[[float, str], None]
 

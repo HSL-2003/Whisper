@@ -2,7 +2,9 @@
 WhisperX Meeting Transcription Web Server
 FastAPI backend with SSE progress streaming, file upload, and URL processing.
 """
+print("[DEBUG STARTUP] Entering server.py...")
 
+print("[DEBUG STARTUP] Importing standard libraries...")
 import asyncio
 import json
 import os
@@ -12,12 +14,14 @@ import time
 from pathlib import Path
 from typing import Optional
 
+print("[DEBUG STARTUP] Importing dotenv & FastAPI modules...")
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+print("[DEBUG STARTUP] Importing downloader module...")
 from downloader import (
     download_audio_from_url,
     convert_uploaded_file,
@@ -25,6 +29,8 @@ from downloader import (
     detect_source_type,
     TEMP_DIR,
 )
+
+print("[DEBUG STARTUP] Importing formatter module...")
 from formatter import (
     format_result_for_frontend,
     generate_markdown,
@@ -32,7 +38,10 @@ from formatter import (
     generate_vtt,
     generate_txt,
 )
+
+print("[DEBUG STARTUP] Importing transcriber module...")
 from transcriber import WhisperXTranscriber
+print("[DEBUG STARTUP] All core modules imported successfully.")
 
 # Ensure ffmpeg/ffprobe are on PATH (uses static_ffmpeg bundled binaries)
 try:

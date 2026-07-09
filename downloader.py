@@ -3,6 +3,7 @@ Media Downloader Module
 Downloads audio from YouTube, TikTok, Vimeo, and direct URLs using yt-dlp.
 Converts media files to WAV 16kHz mono format required by WhisperX.
 """
+print("[DEBUG STARTUP] Entering downloader.py...")
 
 import os
 import sys
@@ -12,14 +13,20 @@ import re
 from pathlib import Path
 from typing import Optional, Tuple
 
+print("[DEBUG STARTUP] downloader.py: Checking static_ffmpeg...")
 try:
     import static_ffmpeg
+    print("[DEBUG STARTUP] downloader.py: static_ffmpeg imported. Setting paths...")
     static_ffmpeg.add_paths()
+    print("[DEBUG STARTUP] downloader.py: static_ffmpeg paths set successfully.")
 except ImportError:
+    print("[DEBUG STARTUP] downloader.py: static_ffmpeg NOT installed. Relying on system ffmpeg.")
     pass
 
 TEMP_DIR = Path(__file__).parent / "temp"
+print(f"[DEBUG STARTUP] downloader.py: Preparing temp directory at {TEMP_DIR}...")
 TEMP_DIR.mkdir(exist_ok=True)
+print("[DEBUG STARTUP] downloader.py: Temp directory prepared.")
 
 # Supported URL patterns
 URL_PATTERNS = {
