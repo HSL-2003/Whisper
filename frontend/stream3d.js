@@ -30,6 +30,7 @@
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
     scene.add(ambientLight);
 
+    // pointLight1 and pointLight2 will dynamically morph colors on scroll
     const pointLight1 = new THREE.PointLight(0x818CF8, 4, 50);
     pointLight1.position.set(5, 10, 5);
     scene.add(pointLight1);
@@ -121,7 +122,7 @@
                 alpha *= borderFade;
                 
                 // Smoothly reveal along scroll
-                float revealThreshold = scrollProgress * 1.3 - 0.15;
+                float revealThreshold = scrollProgress;
                 if (vUv.x > revealThreshold) {
                     alpha = 0.0;
                 } else {
@@ -143,15 +144,19 @@
 
     // 4. Outer Glass Pipe Mesh (Vỏ ống thủy tinh vật lý)
     const glassPipeGeometry = new THREE.TubeGeometry(curve, 100, 0.44, 16, false);
+    
+    // UI/UX Pro Max upgrade: High refraction clearcoat material
     const glassPipeMaterial = new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.22,
-        roughness: 0.05,
+        opacity: 0.25,
+        roughness: 0.02,
         metalness: 0.1,
-        transmission: 0.92, // Glass refraction
-        ior: 1.52,          // Index of refraction of glass
-        thickness: 0.4,     // Glass wall thickness
+        transmission: 0.95, // High light transmission
+        ior: 1.54,          // Real glass refractive index
+        thickness: 0.45,
+        clearcoat: 1.0,     // Super shiny gloss coating
+        clearcoatRoughness: 0.08,
         depthWrite: true,
         side: THREE.DoubleSide
     });
@@ -202,7 +207,7 @@
         brackets.push(bracket);
     }
 
-    // 7. 🧒 UPGRADE: Create Larger Animated Boy Character with Expressions!
+    // 7. 🧒 UPGRADE: Create Reclined Water Slide Posture Boy Character!
     const boyGroup = new THREE.Group();
     
     // skin material
@@ -214,45 +219,45 @@
     // pants material (denim blue)
     const pantsMaterial = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.5 });
     
-    // Head (Sphere) - Upgraded to Radius 0.16 (fills tube width)
+    // Head (Sphere) - offset back slightly because torso is tilted
     const headGeom = new THREE.SphereGeometry(0.16, 16, 16);
     const head = new THREE.Mesh(headGeom, skinMaterial);
-    head.position.y = 0.20;
+    head.position.set(0, 0.12, -0.08);
     boyGroup.add(head);
 
     // Hair Cap
     const hairGeom = new THREE.SphereGeometry(0.165, 16, 16, 0, Math.PI * 2, 0, Math.PI / 1.7);
     const hair = new THREE.Mesh(hairGeom, hairMaterial);
-    hair.position.y = 0.21;
-    hair.rotation.x = -0.25;
+    hair.position.set(0, 0.13, -0.09);
+    hair.rotation.x = -0.4;
     boyGroup.add(hair);
 
     // Eyes (Excited wide open!)
     const eyeGeom = new THREE.SphereGeometry(0.024, 8, 8);
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const leftEye = new THREE.Mesh(eyeGeom, eyeMat);
-    leftEye.position.set(0.05, 0.20, 0.14);
+    leftEye.position.set(0.05, 0.14, 0.06);
     const rightEye = new THREE.Mesh(eyeGeom, eyeMat);
-    rightEye.position.set(-0.05, 0.20, 0.14);
+    rightEye.position.set(-0.05, 0.14, 0.06);
     boyGroup.add(leftEye, rightEye);
 
     // Rosy Cheeks (Excitement glow!)
     const cheekGeom = new THREE.SphereGeometry(0.024, 8, 8);
     const cheekMat = new THREE.MeshBasicMaterial({ color: 0xff8ba7 });
     const leftCheek = new THREE.Mesh(cheekGeom, cheekMat);
-    leftCheek.position.set(0.08, 0.14, 0.13);
+    leftCheek.position.set(0.08, 0.09, 0.05);
     const rightCheek = new THREE.Mesh(cheekGeom, cheekMat);
-    rightCheek.position.set(-0.08, 0.14, 0.13);
+    rightCheek.position.set(-0.08, 0.09, 0.05);
     boyGroup.add(leftCheek, rightCheek);
 
     // Eyebrows tilted in surprise/excitement
     const browGeom = new THREE.BoxGeometry(0.045, 0.01, 0.01);
     const browMat = new THREE.MeshBasicMaterial({ color: 0x4a2e1b });
     const leftBrow = new THREE.Mesh(browGeom, browMat);
-    leftBrow.position.set(0.05, 0.225, 0.14);
+    leftBrow.position.set(0.05, 0.18, 0.06);
     leftBrow.rotation.z = 0.18; // tilt up
     const rightBrow = new THREE.Mesh(browGeom, browMat);
-    rightBrow.position.set(-0.05, 0.225, 0.14);
+    rightBrow.position.set(-0.05, 0.18, 0.06);
     rightBrow.rotation.z = -0.18; // tilt up
     boyGroup.add(leftBrow, rightBrow);
 
@@ -260,42 +265,44 @@
     const mouthGeom = new THREE.SphereGeometry(0.034, 8, 8);
     const mouthMat = new THREE.MeshBasicMaterial({ color: 0x400505 }); // dark red inside
     const mouth = new THREE.Mesh(mouthGeom, mouthMat);
-    mouth.position.set(0, 0.13, 0.145);
+    mouth.position.set(0, 0.08, 0.07);
     mouth.scale.set(1.4, 0.7, 0.8); // oval shape
     boyGroup.add(mouth);
 
-    // Torso (Cylinder)
+    // Torso (Cylinder) - Tilted backward for water sliding posture
     const torsoGeom = new THREE.CylinderGeometry(0.11, 0.09, 0.24, 16);
     const torso = new THREE.Mesh(torsoGeom, shirtMaterial);
-    torso.position.y = -0.02;
+    torso.position.set(0, -0.04, 0);
+    torso.rotation.x = -Math.PI / 4.5; // Reclined back
     boyGroup.add(torso);
 
-    // Pants (Cylinder)
+    // Pants (Cylinder) - Tilted backward
     const pantsGeom = new THREE.CylinderGeometry(0.09, 0.09, 0.1, 16);
     const pants = new THREE.Mesh(pantsGeom, pantsMaterial);
-    pants.position.y = -0.15;
+    pants.position.set(0, -0.14, 0.03);
+    pants.rotation.x = -Math.PI / 4.5;
     boyGroup.add(pants);
 
-    // Legs sitting/extended forward
+    // Legs - Extended straight forward (surfing/sliding position)
     const legGeom = new THREE.CylinderGeometry(0.04, 0.03, 0.18, 8);
     const leftLeg = new THREE.Mesh(legGeom, pantsMaterial);
-    leftLeg.position.set(0.05, -0.19, 0.08);
-    leftLeg.rotation.x = Math.PI / 2.3; // sliding forward
+    leftLeg.position.set(0.05, -0.18, 0.15);
+    leftLeg.rotation.x = Math.PI / 2.1; // Pointing forward along pipe
     const rightLeg = new THREE.Mesh(legGeom, pantsMaterial);
-    rightLeg.position.set(-0.05, -0.19, 0.08);
-    rightLeg.rotation.x = Math.PI / 2.15; // slightly offset for realism
+    rightLeg.position.set(-0.05, -0.18, 0.15);
+    rightLeg.rotation.x = Math.PI / 2.15;
     boyGroup.add(leftLeg, rightLeg);
 
-    // Arms waving in excitement!
+    // Arms - Raised high in the air (waving & screaming posture!)
     const armGeom = new THREE.CylinderGeometry(0.035, 0.026, 0.18, 8);
     const leftArm = new THREE.Mesh(armGeom, skinMaterial);
-    leftArm.position.set(0.15, 0.07, 0.03);
-    leftArm.rotation.z = -Math.PI / 3; // Wave out
-    leftArm.rotation.x = Math.PI / 6;
+    leftArm.position.set(0.14, 0.06, -0.04);
+    leftArm.rotation.x = -Math.PI / 4; // raised up/back
+    leftArm.rotation.z = -Math.PI / 3; // wave out
     const rightArm = new THREE.Mesh(armGeom, skinMaterial);
-    rightArm.position.set(-0.15, 0.07, 0.03);
-    rightArm.rotation.z = Math.PI / 3;  // Wave out
-    rightArm.rotation.x = -Math.PI / 6;
+    rightArm.position.set(-0.14, 0.06, -0.04);
+    rightArm.rotation.x = -Math.PI / 4;
+    rightArm.rotation.z = Math.PI / 3;
     boyGroup.add(leftArm, rightArm);
 
     // Add Boy to the Scene
@@ -550,6 +557,35 @@
     const ambientParticleSystem = new THREE.Points(aParticleGeometry, aParticleMaterial);
     scene.add(ambientParticleSystem);
 
+    // 🪐 UI/UX Pro Max upgrade: 11. Sci-Fi Digital Backdrop Grid (Mạng lưới tinh tú)
+    const backdropCount = 200;
+    const backdropGeometry = new THREE.BufferGeometry();
+    const backdropPositions = new Float32Array(backdropCount * 3);
+    
+    for (let i = 0; i < backdropCount; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const radius = 12 + Math.random() * 16;
+        const x = Math.cos(theta) * radius;
+        const z = Math.sin(theta) * radius;
+        const y = (Math.random() - 0.5) * 55;
+        
+        backdropPositions[i * 3] = x;
+        backdropPositions[i * 3 + 1] = y;
+        backdropPositions[i * 3 + 2] = z;
+    }
+    
+    backdropGeometry.setAttribute('position', new THREE.BufferAttribute(backdropPositions, 3));
+    const backdropMaterial = new THREE.PointsMaterial({
+        size: 0.18,
+        color: 0x818CF8,
+        transparent: true,
+        opacity: 0.28,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const backdropSystem = new THREE.Points(backdropGeometry, backdropMaterial);
+    scene.add(backdropSystem);
+
     // 13. 🔄 UPGRADE: Smooth Interpolation State Variables (Vật lý chuyển động mượt mà)
     let scrollPercent = 0;
     let currentBoyT = 0;       // Smoothly lerped slide progress
@@ -567,14 +603,10 @@
         const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
         scrollPercent = maxScroll <= 0 ? 0 : scrollY / maxScroll;
         
-        // Update shader scroll progress
-        waterMaterial.uniforms.scrollProgress.value = scrollPercent;
-        whirlpoolMaterial.uniforms.scrollProgress.value = scrollPercent;
-        
-        // Camera parallax position interpolation
-        const targetY = 12 - scrollPercent * 25;
+        // Camera parallax position interpolation (centered at the bottom for whirlpool close-up!)
+        const targetY = 12 - scrollPercent * 28.5; // lowered to -16.5 to focus on Y = -18
         const targetX = Math.sin(scrollPercent * Math.PI) * 2.2;
-        const targetZ = 9 + Math.cos(scrollPercent * Math.PI) * 2.2;
+        const targetZ = 8.5 + Math.cos(scrollPercent * Math.PI) * 3.5; // zooms in closer to Z = 5.0
         
         camera.position.y += (targetY - camera.position.y) * 0.08;
         camera.position.x += (targetX - camera.position.x) * 0.08;
@@ -632,13 +664,21 @@
     // 15. Animation Loop
     const clock = new THREE.Clock();
     
+    // Light color palettes for dynamic morphing on scroll
+    const colTop1 = new THREE.Color(0x818CF8); // Indigo
+    const colTop2 = new THREE.Color(0x22D3EE); // Cyan
+    const colMid1 = new THREE.Color(0xA855F7); // Purple
+    const colMid2 = new THREE.Color(0xEC4899); // Pink
+    const colBot1 = new THREE.Color(0xF97316); // Orange
+    const colBot2 = new THREE.Color(0xEF4444); // Red
+
     function animate() {
         requestAnimationFrame(animate);
         
         const delta = clock.getDelta();
         const time = clock.getElapsedTime();
         
-        // Update water shader uniforms
+        // Update water shader time uniform
         waterMaterial.uniforms.time.value = time;
         whirlpoolMaterial.uniforms.time.value = time;
         
@@ -649,6 +689,29 @@
         // 🧒 SMOOTH BOYT INTERPOLATION (Silky smooth sliding slide!)
         currentBoyT += (targetBoyT - currentBoyT) * 0.085; // Lerp progress
         
+        // 🌊 SYNCHRONIZE WATER REVEAL TO ALWAYS BE SLIGHTLY AHEAD OF THE BOY!
+        // This prevents the boy from "jumping down before the water pipe (liquid) appears".
+        waterMaterial.uniforms.scrollProgress.value = Math.min(1.0, currentBoyT + 0.08);
+
+        // 🪐 Cosmic backdrop vertical parallax scroll & rotation
+        backdropSystem.rotation.y = time * 0.015;
+        backdropSystem.position.y = camera.position.y * 0.35; // moves slower than camera for deep depth feeling
+
+        // 💡 DYNAMIC LIGHT COLOR MORPHING based on smooth sliding progress
+        const smoothProgress = Math.min(1.0, currentBoyT / 0.96);
+        let currentLightCol1, currentLightCol2;
+        if (smoothProgress < 0.5) {
+            const t = smoothProgress * 2;
+            currentLightCol1 = colTop1.clone().lerp(colMid1, t);
+            currentLightCol2 = colTop2.clone().lerp(colMid2, t);
+        } else {
+            const t = (smoothProgress - 0.5) * 2;
+            currentLightCol1 = colMid1.clone().lerp(colBot1, t);
+            currentLightCol2 = colMid2.clone().lerp(colBot2, t);
+        }
+        pointLight1.color.copy(currentLightCol1);
+        pointLight2.color.copy(currentLightCol2);
+
         // Fetch boy's basic curve point
         const boyPos = curve.getPointAt(currentBoyT);
         
@@ -692,12 +755,20 @@
             boyGroup.rotateX((Math.random() - 0.5) * 0.08); // pitch rattling
         }
         
-        // Screaming mouth opens/closes (screaming "Ahhh!")
-        mouth.scale.y = 0.65 + Math.sin(time * 16.0) * 0.35;
+        // 🧒 SPEED-BASED ANIMATION:
+        // Calculate current scrolling speed (rate of change)
+        const scrollSpeed = Math.min(0.25, Math.abs(targetBoyT - currentBoyT));
+        const speedRatio = scrollSpeed / 0.25; // 0 to 1
+
+        // Screaming mouth opens wider when sliding fast!
+        const mouthScaleY = (0.65 + Math.sin(time * 16.0) * 0.35) * (1.0 + speedRatio * 1.5);
+        const mouthScaleX = 1.4 * (1.0 + speedRatio * 0.8);
+        mouth.scale.set(mouthScaleX, mouthScaleY, 0.8);
         
-        // Waving arms
-        leftArm.rotation.x = Math.PI / 5 + Math.sin(time * 14.0) * 0.25;
-        rightArm.rotation.x = -Math.PI / 5 + Math.cos(time * 14.0) * 0.25;
+        // Waving arms (Wave faster when sliding fast!)
+        const waveFrequency = 14.0 + speedRatio * 18.0; // scales up to 32Hz!
+        leftArm.rotation.x = -Math.PI / 4 + Math.sin(time * waveFrequency) * (0.25 + speedRatio * 0.35);
+        rightArm.rotation.x = -Math.PI / 4 + Math.cos(time * waveFrequency) * (0.25 + speedRatio * 0.35);
         
         // 🧒 SMOOTH WHIRLPOOL SUCK-IN / REVELATION (Reversible)
         if (currentBoyT > 0.91) {
@@ -729,7 +800,7 @@
         for (let i = 0; i < particleCount; i++) {
             particleProgress[i] += delta * 0.06 * particleOffsets[i].speed;
             
-            const revealLimit = scrollPercent * 1.3;
+            const revealLimit = currentBoyT + 0.08;
             if (particleProgress[i] > revealLimit || particleProgress[i] > 1) {
                 particleProgress[i] = 0;
             }
